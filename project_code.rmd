@@ -1,0 +1,1299 @@
+---
+title: "Time series - project"
+author: "Рахманова Амина, Клечикова Маргарита БЭК-196"
+subtitle: "Вариант 12"
+output:
+  html_document:
+    df_print: paged
+---
+
+# 1. Задание 
+
+Взять дневные или недельные цены акций 5-7 компаний за период 2015-2021 годы включительно. Из них 2 компании должны быть те, кто имеет привилегированные акции. 
+
+Построить одномерные модели временных рядов, оценить волатильность. 
+
+Построить модель векторной авторегрессии для этих акций, проверить каждое уравнение VAR модели на структурный сдвиг в период начала пандемии (в США - 24 февраля) и в момент выхода новости о создании вакцины (в США - 4 ноября). 
+
+Выяснить, наблюдается ли коинтеграция между рассматриваемыми акциями? Продемонстрировать, как коинтеграция влияет на прогноз. 
+
+Для расчета ожидаемой доходности финансовых инструментов использовать модель CAPM. 
+
+
+# 2. Введение 
+
+Для данного исследования мы выбрали акции следующих компаний:
+
++ ПАО "ТАТНЕФТЬ" (TATN_p) - привилегированные акции
+
++ ПАО "СУРГУТНЕФТЕГАЗ" (SNGS_p) - привилегированные акции
+
++ ОАО АК "АЛРОСА" (ALRS)
+
++ ПАО "ГАЗПРОМ НЕФТЬ" (SIBN)
+
++ ПАО "НОВОЛИПЕЦКИЙ МЕТАЛЛУРГИЧЕСКИЙ КОМБИНАТ" (NLMK)
+
++ ПАО "КАМАЗ" (KMAZ)
+
++ ПАО "АЭРОФЛОТ-РОССИЙСКИЕ АВИАЛИНИИ" (AFLT) 
+
+```{r message = FALSE, warning=FALSE, echo = F, comment = ""}
+#install.packages("forecast")
+#install.packages("lmtest")
+#install.packages("tseries")
+#install.packages("vars")
+#install.packages("urca")
+#install.packages("TSA")
+#install.packages("Matrix")
+#install.packages("matlib")
+#install.packages("portes")
+#install.packages("readxl")
+#install.packages("tidyverse")
+#install.packages("ggplot2")
+#install.packages("rugarch")
+#install.packages("vars")
+
+library("readxl")
+library("tidyverse")
+library("ggplot2")
+library("forecast")
+library("lmtest")
+library("tseries")
+library("vars")
+library("urca")
+library("TSA")
+library("Matrix")
+library("matlib")
+library("portes")
+library("rugarch")
+library("vars")
+library("lubridate")
+
+#data = read_excel("/cloud/project/dannye.xlsx") 
+data = read_excel("~/time series/project/stocks.xlsx") 
+data$date = ymd(data$date)
+```
+
+## Наши данные
+
+Мы взяли дневные данные с 05.01.2015 по 30.12.2021 (исключая выходные на бирже). Так они выглядят в исходнои виде:
+
+```{r}
+head(data, 5)
+tail(data, 5)
+```
+
+
+# 3. Проверка данных на сезонность 
+
+```{r}
+time = data$date
+time = as.Date(time, "%m/%d/%y")
+
+plot(time, data$TATN_p)
+plot(time, data$SNGS_p)
+plot(time, data$ALRS)
+plot(time, data$SIBN)
+plot(time, data$NLMK)
+plot(time, data$KMAZ)
+plot(time, data$AFLT)
+```
+
+На графиках сезонность не наблюдается, что ожидаемо, так как цены на акции меняются стихийно, вследствие прочих внешних факторов.
+
+
+# 4. Проверка данных на стационарность 
+
+Критическое значение для проверки на 1% уровне значимости = -3.43
+
+## 4.1. TATN_p
+
+```{r}
+#Pacf(data$TATN_p) #lags = 1
+stTANT = ur.df(data$TATN_p, type="drift", lags = 1, selectlags = "Fixed")
+stTANT@teststat
+```
+
+Значение t статистики -1.556173 > -3.43.
+
+## 4.2. SNGS_p
+
+```{r}
+#Pacf(data$SNGS_p) #lags = 1
+stSNGS = ur.df(data$SNGS_p, type="drift", lags = 1, selectlags = "Fixed")
+stSNGS@teststat
+```
+
+Значение t статистики -2.913332 > -3.43.
+
+## 4.3. ALRS
+
+```{r}
+#Pacf(data$ALRS) #lags = 1
+stALRS = ur.df(data$ALRS, type="drift", lags = 1, selectlags = "Fixed")
+stALRS@teststat
+```
+
+Значение t статистики -1.520594 > -3.43.
+
+## 4.4. SIBN
+
+```{r}
+#Pacf(data$SIBN) #lags = 1
+stSIBN = ur.df(data$SIBN, type="drift", lags = 1, selectlags = "Fixed")
+stSIBN@teststat
+```
+
+Значение t статистики -0.001731526 > -3.43.
+
+## NLMK
+
+```{r}
+#Pacf(data$NLMK) #lags = 1
+stNLMK = ur.df(data$NLMK, type="drift", lags = 1, selectlags = "Fixed")
+stNLMK@teststat
+```
+
+Значение t статистики -0.9758007 > -3.43.
+
+## 4.5. KMAZ
+
+```{r}
+#Pacf(data$KMAZ) #lags = 1
+stKMAZ = ur.df(data$KMAZ, type="drift", lags = 1, selectlags = "Fixed")
+stKMAZ@teststat
+```
+
+Значение t статистики -0.9685645 > -3.43. 
+
+## 4.6. AFLT
+
+```{r}
+#Pacf(data$AFLT) #lags = 1
+stAFLT = ur.df(data$AFLT, type="drift", lags = 1, selectlags = "Fixed")
+stAFLT@teststat
+```
+
+Значение t статистики -1.397104 > -3.43. 
+
+## 4.7. Вывод:
+
+Гипотеза о нестационарности рядов не отклоняется => ряды нестационарны, применяем тест Энгла-Гренджера на коинтеграцию для начальных данных, а для построения ARMA-модели будем использовать разности.
+
+
+# 5. Проверка первых разностей на стационарность 
+
+## 5.1. Расчет первых разностей
+
+```{r}
+d1TATN = diff(data$TATN_p, differences=1)
+d1SNGS = diff(data$SNGS_p, differences=1)
+d1ALRS = diff(data$ALRS, differences=1)
+d1SIBN = diff(data$SIBN, differences=1)
+d1NLMK = diff(data$NLMK, differences=1)
+d1KMAZ = diff(data$KMAZ, differences=1)
+d1AFLT = diff(data$AFLT, differences=1)
+```
+
+## 5.2. d1TATN
+
+```{r}
+#Pacf(d1TATN) #lags = 2
+std1TATN = ur.df(d1TATN, type="drift", lags = 2, selectlags = "Fixed")
+std1TATN@teststat
+```
+
+Значение t статистики -21.80503 < -3.43.
+
+## 5.3. d1SNGS
+
+```{r}
+#Pacf(d1SNGS) #lags = 7
+std1SNGS = ur.df(d1SNGS, type="drift", lags = 7, selectlags = "Fixed")
+std1SNGS@teststat
+```
+
+Значение t статистики -14.47239 < -3.43.
+
+## 5.4. d1ALRS
+
+```{r}
+#Pacf(d1ALRS) #lags = 27
+std1ALRS = ur.df(d1ALRS, type="drift", lags = 27, selectlags = "Fixed")
+std1ALRS@teststat
+```
+
+Значение t статистики -7.792801 < -3.43.
+
+## 5.5. d1SIBN
+
+```{r}
+#Pacf(d1SIBN) #lags = 1
+std1SIBN = ur.df(d1SIBN, type="drift", lags = 1, selectlags = "Fixed")
+std1SIBN@teststat
+```
+
+Значение t статистики -28.52974 < -3.43.
+
+## 5.6. d1NLMK
+
+```{r}
+#Pacf(d1NLMK) #lags = 7
+std1NLMK = ur.df(d1NLMK, type="drift", lags = 7, selectlags = "Fixed")
+std1NLMK@teststat
+```
+
+Значение t статистики -13.70413 < -3.43.
+
+## 5.7. d1KMAZ
+
+```{r}
+#Pacf(d1KMAZ) #lags = 2
+std1KMAZ = ur.df(d1KMAZ, type="drift", lags = 2, selectlags = "Fixed")
+std1KMAZ@teststat
+```
+
+Значение t статистики -26.38805 < -3.43.
+
+## 5.8. d1AFLT
+
+```{r}
+#Pacf(d1AFLT) #lags = 1
+std1AFLT = ur.df(d1AFLT, type="drift", lags = 1, selectlags = "Fixed")
+std1AFLT@teststat
+```
+
+Значение t статистики -28.56271 < -3.43.
+
+## 5.9. Вывод: 
+
+Гипотеза о нестационарности отклоняется на 1% уровне => разности стационарны, можно строить ARMA модель на первых разностях.
+
+
+# 6. ARMA model и проверка на автокорреляцию 
+
+lag = ln(1765) = 7
+
+Параметры ARMA(p, k) выбирались на основе сравнения BIC и AIC нескольких моделей ARMA.
+
+## 6.1. d1TATN
+
+```{r}
+#eacf(d1TATN) # (p, k) = (0,2)
+ARMAmodelTANT = Arima(data$TATN_p, c(0,1,2), include.constant=TRUE, method = c("CSS-ML"))
+
+#Acf(residuals(ARMAmodelTANT)) # автокорреляция на графике
+Box.test(residuals(ARMAmodelTANT), lag = 7, type = c("Ljung-Box"), fitdf = 2) # тест на автокорреляцию
+shapiro.test(residuals(ARMAmodelTANT)) # проверка на нормальное распределение 
+```
+
+## 6.2. d1SNGS
+
+```{r}
+ARMAmodelSNGS = Arima(data$SNGS_p, c(0,1,1), include.constant=TRUE, method = c("CSS-ML"))  
+
+Acf(residuals(ARMAmodelSNGS))
+Box.test(residuals(ARMAmodelSNGS), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+shapiro.test(residuals(ARMAmodelSNGS)) 
+```
+
+## 6.3. d1ALRS
+
+```{r}
+ARMAmodelALRS = Arima(data$ALRS, c(0,1,1), include.constant=TRUE, method = c("CSS-ML"))  
+
+Acf(residuals(ARMAmodelALRS))
+Box.test(residuals(ARMAmodelALRS), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+shapiro.test(residuals(ARMAmodelALRS)) 
+```
+
+## 6.4. d1SIBN
+
+```{r}
+ARMAmodelSIBN = Arima(data$SIBN, c(0,1,4), include.constant=TRUE, method = c("CSS-ML"))  
+
+Acf(residuals(ARMAmodelSIBN))
+Box.test(residuals(ARMAmodelSIBN), lag = 7, type = c("Ljung-Box"), fitdf = 4)
+shapiro.test(residuals(ARMAmodelSIBN)) 
+```
+
+## 6.5. d1NLMK
+
+```{r}
+ARMAmodelNLMK = Arima(data$NLMK, c(0,1,1), include.constant=TRUE, method = c("CSS-ML"))  
+
+Acf(residuals(ARMAmodelNLMK))
+Box.test(residuals(ARMAmodelNLMK), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+shapiro.test(residuals(ARMAmodelNLMK)) 
+```
+
+## 6.6. d1KMAZ
+
+```{r}
+ARMAmodelKMAZ = Arima(data$KMAZ, c(0,1,4), include.constant=TRUE, method = c("CSS-ML"))  
+
+Acf(residuals(ARMAmodelKMAZ))
+Box.test(residuals(ARMAmodelKMAZ), lag = 7, type = c("Ljung-Box"), fitdf = 4)
+shapiro.test(residuals(ARMAmodelKMAZ)) 
+```
+
+## 6.7. d1AFLT
+
+```{r}
+ARMAmodelAFLT = Arima(data$AFLT, c(0,1,1), include.constant=TRUE, method = c("CSS-ML"))  
+
+Acf(residuals(ARMAmodelAFLT))
+Box.test(residuals(ARMAmodelAFLT), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+shapiro.test(residuals(ARMAmodelAFLT)) 
+```
+
+## 6.8. Вывод:
+
+Box-Ljung test: p-value > 0.05 - автокорреляция остатков отсутствует на уровне значимости 5%, на графиках можно увидеть аналогичный результат.
+
+Shapiro-Wilk normality test: p-value < 2.2e-16 - гипотеза о нормальном распределении отвергается.
+
+
+# 7. Проверка данных на волатильность через GARCH 
+
+Параметры и тип модели GARCH выбирались опытным путем через сравнение моделей по показателям LogLikelihood и Information Criteria.
+
+При расчетах используется первая разность.
+
+Также каждая модель проверяется на автокорреляцию стандатизированных остатков и остатков в квадрате с помощью Box-Ljung теста.
+
+## 7.1. d1TATN 
+
+```{r}
+spec_TATN = ugarchspec(variance.model = list(model = 'sGARCH', garchOrder = c(1, 1)), 
+                   mean.model = list(armaOrder = c(0, 2), include.mean = TRUE), distribution.model = "norm")
+garch.TATN = ugarchfit(spec_TATN, d1TATN)
+
+Box.test(residuals(garch.TATN, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 2)
+Box.test(residuals(garch.TATN, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 2)
+```
+
+## 7.2. d1SNGS
+
+```{r}
+spec_SNGS = ugarchspec(variance.model = list(model = 'sGARCH',garchOrder = c(1, 1)), 
+                   mean.model = list(armaOrder = c(0, 1), include.mean = TRUE), distribution.model = "std")
+garch.SNGS = ugarchfit(spec_SNGS, d1SNGS)
+
+Box.test(residuals(garch.SNGS, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+Box.test(residuals(garch.SNGS, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 1)
+```
+
+## 7.3. d1ALRS
+
+```{r}
+spec_ALRS = ugarchspec(variance.model = list(model = 'sGARCH',garchOrder = c(1, 1)), 
+                   mean.model = list(armaOrder = c(0, 1), include.mean = TRUE), distribution.model = "norm")
+garch.ALRS = ugarchfit(spec_ALRS, d1ALRS)
+
+Box.test(residuals(garch.ALRS, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+Box.test(residuals(garch.ALRS, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 1)
+```
+
+## 7.4. d1SIBN 
+
+```{r}
+spec_SIBN = ugarchspec(variance.model = list(model = 'sGARCH',garchOrder = c(1, 3)), 
+                   mean.model = list(armaOrder = c(0, 4), include.mean = TRUE), distribution.model = "std")
+garch.SIBN = ugarchfit(spec_SIBN, d1SIBN)
+
+Box.test(residuals(garch.SIBN, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 4)
+Box.test(residuals(garch.SIBN, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 4)
+```
+
+## 7.5. d1NLMK
+
+```{r}
+spec_NLMK = ugarchspec(variance.model = list(model = 'sGARCH',garchOrder = c(1, 1)), 
+                   mean.model = list(armaOrder = c(0, 1), include.mean = TRUE), distribution.model = "std")
+garch.NLMK = ugarchfit(spec_NLMK, d1NLMK)
+
+Box.test(residuals(garch.NLMK, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+Box.test(residuals(garch.NLMK, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 1)
+```
+
+## 7.6. d1KMAZ
+
+```{r}
+spec_KMAZ = ugarchspec(variance.model = list(model = 'sGARCH',garchOrder = c(1, 3)), 
+                   mean.model = list(armaOrder = c(0, 4), include.mean = TRUE), distribution.model = "std")
+garch.KMAZ = ugarchfit(spec_KMAZ, d1KMAZ)
+
+Box.test(residuals(garch.KMAZ, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 4)
+Box.test(residuals(garch.KMAZ, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 4)
+```
+
+## 7.7. d1AFLT
+
+```{r}
+spec_AFLT = ugarchspec(variance.model = list(model = 'sGARCH',garchOrder = c(1, 3)), 
+                   mean.model = list(armaOrder = c(0, 1), include.mean = TRUE), distribution.model = "std")
+garch.AFLT = ugarchfit(spec_AFLT, d1AFLT)
+
+Box.test(residuals(garch.AFLT, standardize="TRUE"), lag = 7, type = c("Ljung-Box"), fitdf = 1)
+Box.test(residuals(garch.AFLT, standardize="TRUE")^2, lag = 7, type = c("Ljung-Box"), fitdf = 1)
+```
+
+## 7.8. Вывод:
+
+Во всех случаях в стандатизированных остатках в квадрате отсутсвует автокорреляция, что является признаком хорошей модели.
+
+
+# 8. Тест Энгла-Гренджера на парную коинтеграцию 
+
+На коинтеграцию в тесте Энгла-Гренджера проверяются все нестационарные данные. В нашем случае - все начальные ряды.
+
+Критическое значение на уровне 5% без тренда = -3.34, на уровне 1% без тренда = -3.90. Данные коинтегриваны при значении t-статистики < критического.
+
+## 8.1. TATN_p
+
+```{r}
+coint_TATN_SNGS = lm(data$TATN_p ~ data$SNGS_p)
+coint_TATN_ALRS = lm(data$TATN_p ~ data$ALRS)
+coint_TATN_SIBN = lm(data$TATN_p ~ data$SIBN)
+coint_TATN_NLMK = lm(data$TATN_p ~ data$NLMK)
+coint_TATN_KMAZ = lm(data$TATN_p ~ data$KMAZ)
+coint_TATN_AFLT = lm(data$TATN_p ~ data$AFLT)
+
+ur.df(coint_TATN_SNGS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_TATN_ALRS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_TATN_SIBN$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_TATN_NLMK$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_TATN_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_TATN_AFLT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С TATN_p коинтеграции нет.
+
+## 8.2. SNGS_p
+
+```{r}
+coint_SNGS_TANT = lm(data$SNGS_p ~ data$TATN_p)
+coint_SNGS_ALRS = lm(data$SNGS_p ~ data$ALRS)
+coint_SNGS_SIBN = lm(data$SNGS_p ~ data$SIBN)
+coint_SNGS_NLMK = lm(data$SNGS_p ~ data$NLMK)
+coint_SNGS_KMAZ = lm(data$SNGS_p ~ data$KMAZ)
+coint_SNGS_AFLT = lm(data$SNGS_p ~ data$AFLT)
+
+ur.df(coint_SNGS_TANT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SNGS_ALRS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SNGS_SIBN$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SNGS_NLMK$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SNGS_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SNGS_AFLT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С SNGS_p коинтегрированна только переменная AFLT.
+
+## 8.3. ALRS
+
+```{r}
+coint_ALRS_TANT = lm(data$ALRS ~ data$TATN_p)
+coint_ALRS_SNGS = lm(data$ALRS ~ data$SNGS_p)
+coint_ALRS_SIBN = lm(data$ALRS ~ data$SIBN)
+coint_ALRS_NLMK = lm(data$ALRS ~ data$NLMK)
+coint_ALRS_KMAZ = lm(data$ALRS ~ data$KMAZ)
+coint_ALRS_AFLT = lm(data$ALRS ~ data$AFLT)
+
+ur.df(coint_ALRS_TANT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_ALRS_SNGS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_ALRS_SIBN$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_ALRS_NLMK$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_ALRS_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed") 
+ur.df(coint_ALRS_AFLT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С ALRS коинтеграции нет.
+
+## 8.4. SIBN
+
+```{r}
+coint_SIBN_TANT = lm(data$SIBN ~ data$TATN_p)
+coint_SIBN_SNGS = lm(data$SIBN ~ data$SNGS_p)
+coint_SIBN_ALRS = lm(data$SIBN ~ data$ALRS)
+coint_SIBN_NLMK = lm(data$SIBN ~ data$NLMK)
+coint_SIBN_KMAZ = lm(data$SIBN ~ data$KMAZ)
+coint_SIBN_AFLT = lm(data$SIBN ~ data$AFLT)
+
+ur.df(coint_SIBN_TANT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SIBN_SNGS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SIBN_ALRS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SIBN_NLMK$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SIBN_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_SIBN_AFLT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С SIBN коинтеграции нет.
+
+## 8.5. NLMK
+
+```{r}
+coint_NLMK_TANT = lm(data$NLMK ~ data$TATN_p)
+coint_NLMK_SNGS = lm(data$NLMK ~ data$SNGS_p)
+coint_NLMK_ALRS = lm(data$NLMK ~ data$ALRS)
+coint_NLMK_SIBN = lm(data$NLMK ~ data$SIBN)
+coint_NLMK_KMAZ = lm(data$NLMK ~ data$KMAZ)
+coint_NLMK_AFLT = lm(data$NLMK ~ data$AFLT)
+
+ur.df(coint_NLMK_TANT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_NLMK_SNGS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_NLMK_ALRS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_NLMK_SIBN$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_NLMK_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_NLMK_AFLT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С NLMK коинтеграции нет.
+
+## 8.6. KMAZ
+
+```{r}
+coint_KMAZ_TANT = lm(data$KMAZ ~ data$TATN_p)
+coint_KMAZ_SNGS = lm(data$KMAZ ~ data$SNGS_p)
+coint_KMAZ_ALRS = lm(data$KMAZ ~ data$ALRS)
+coint_KMAZ_SIBN = lm(data$KMAZ ~ data$SIBN)
+coint_KMAZ_NLMK = lm(data$KMAZ ~ data$NLMK)
+coint_KMAZ_AFLT = lm(data$KMAZ ~ data$AFLT)
+
+ur.df(coint_KMAZ_TANT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_KMAZ_SNGS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_KMAZ_ALRS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_KMAZ_SIBN$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_KMAZ_NLMK$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_KMAZ_AFLT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С KMAZ коинтеграции нет.
+
+## 8.7. AFLT
+
+```{r}
+coint_AFLT_TANT = lm(data$AFLT ~ data$TATN_p)
+coint_AFLT_SNGS = lm(data$AFLT ~ data$SNGS_p)
+coint_AFLT_ALRS = lm(data$AFLT ~ data$ALRS)
+coint_AFLT_SIBN = lm(data$AFLT ~ data$SIBN)
+coint_AFLT_NLMK = lm(data$AFLT ~ data$NLMK)
+coint_AFLT_KMAZ = lm(data$AFLT ~ data$KMAZ)
+
+ur.df(coint_AFLT_TANT$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_AFLT_SNGS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_AFLT_ALRS$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_AFLT_SIBN$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_AFLT_NLMK$residuals, type="drift", lags = 1, selectlags = "Fixed")
+ur.df(coint_AFLT_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed")
+```
+
+С AFLT коинтегрированна только переменная SNGS_p.
+
+## 8.8. Вывод:
+ 
+Из всех данных коинтегрированными на 1% уровне является только пара SNGS_p и AFLT. Данную коинтеграцию можно использовать в качестве основной модели для построения совместного прогноза.
+
+Для остальных переменных - переходить на первую разность и строить вектор авторегрессионной модели.
+
+
+# 9. Тест Johansen на коинтеграцию всех данных 
+
+Проверим все акции на коинтеграцию:
+
+```{r}
+df_all = data %>% dplyr::select(-date)
+coint_jo_all = ca.jo(df_all, ecdet = "const", type = "eigen", K=2, spec = "transitory", season = NULL)
+coint_jo_all
+```
+
+На уровне r = 0: 43.15 < 51.91 => нулевая гипотеза (коинтеграция между 7 переменными отсутствует) не отвергается, то есть коинтеграции между выбранными нами акциями не неблюдается. 
+
+Таким образом, для совместного прогноза берем разности по всем данным и строим VAR model.
+
+
+# 10. Анализ кросс-корреляции между переменными, причинность по Грэнджеру 
+
+Целевая переменная - TATN_p.
+
+## 10.1. TATN & SNGS
+
+```{r}
+ccf(d1TATN, d1SNGS, lag.max = 20, type = c("correlation"), plot = TRUE) 
+grangertest(d1SNGS, d1TATN, order = 1) 
+```
+
+p-value = 0.4858 => влияния нет
+
+## 10.2. TATN & ALRS
+
+```{r}
+ccf(d1TATN, d1ALRS, lag.max = 35, type = c("correlation"), plot = TRUE)
+grangertest(d1ALRS, d1TATN, order = 31)
+```
+
+p-value = 0.3605 => влияния нет
+
+## 10.3. TATN & SIBN
+
+```{r}
+ccf(d1TATN, d1SIBN, lag.max = 30, type = c("correlation"), plot = TRUE)
+grangertest(d1SIBN, d1TATN, order = 29)
+```
+
+p-value = 2.718e-06 => влияние есть
+
+## 10.4. TATN & NLMK
+
+```{r}
+ccf(d1TATN, d1NLMK, lag.max = 25, type = c("correlation"), plot = TRUE)
+grangertest(d1NLMK, d1TATN, order = 19)
+```
+
+p-value = 0.009423 => влияние есть
+
+## 10.5. TATN & KMAZ
+
+```{r}
+ccf(d1TATN, d1KMAZ, lag.max = 30, type = c("correlation"), plot = TRUE)
+grangertest(d1KMAZ, d1TATN, order = 25)
+```
+
+p-value = 0.005577 => влияние есть
+
+## 10.6. TATN & AFLT
+
+```{r}
+ccf(d1TATN, d1AFLT, lag.max = 30, type = c("correlation"), plot = TRUE)
+grangertest(d1AFLT, d1TATN, order = 22)
+```
+
+p-value = 0.05897 => влияние есть
+
+## 10.7. Вывод: 
+
+Наиболее сильное влияние имеют SIBN, KMAZ, NLMK и AFLT. 
+
+# 11. VAR-модель 
+
+Целевая переменная анализа - привилегированные акции компании ПАО "Татнефть".
+
+## 11.1. Модель с 2-мя переменными: SIBN cause TATN
+
+```{r}
+df = data.frame(d1TATN, d1SIBN)
+VARselect(df, lag.max = 23, type = 'const')$selection
+```
+
+```{r}
+var = VAR(df, p = 10, type = 'const')
+Hosking(var, lags=1.5*var$p)
+LiMcLeod(var, lags=1.5*var$p)
+```
+
+Авто- и кросс-корреляции нет
+
+### 11.1.1. Модель без ограничений (в сравнении с ARMA)
+
+```{r}
+n = length(coef(ARMAmodelTANT))-1
+x = var$p-n+1
+rss = sum(ARMAmodelTANT$residuals[x:length(residuals(ARMAmodelTANT))]^2)
+n1 = var$varresult$d1TATN$rank-1
+ess = sum(var$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-2*n1-1, lower.tail=F)
+```
+
+p-value = 6.587105e-10 => VAR(2) model превосходит ARMA model.
+
+### 11.1.2. Модель с ограничениями (в сравнении с ARMA)
+
+```{r}
+resvar = restrict(var, method = c("ser"), thresh = 0.8)
+n1 = resvar$varresult$d1TATN$rank-1
+if(n1<n+1){n1=n+1}
+ess = sum(resvar$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-n-n1-1, lower.tail=F)
+```
+
+```{r}
+Hosking(resvar, lags=1.5*var$p)
+LiMcLeod(resvar, lags=1.5*var$p)
+```
+
+F-критерий увеличился, при этом модель все еще лучше ARMA и не имеет авто- и кросс-корреляции остатков => превосходит модель без ограничений.
+
+## 11.2. Модель с 3-мя переменными: SIBN, KMAZ cause TATN
+
+```{r}
+df = data.frame(d1TATN, d1SIBN, d1KMAZ)
+VARselect(df, lag.max = 21, type = 'const')$selection
+```
+
+```{r}
+var = VAR(df, p = 10, type = 'const')
+Hosking(var, lags=1.3*var$p)
+LiMcLeod(var, lags=1.3*var$p)
+```
+
+Авто- и кросс-корреляции нет
+
+### 11.2.1. Модель без ограничений (в сравнении с ARMA)
+
+```{r}
+n = length(coef(ARMAmodelTANT))-1
+x = var$p-n+1
+rss = sum(ARMAmodelTANT$residuals[x:length(residuals(ARMAmodelTANT))]^2)
+n1 = var$varresult$d1TATN$rank-1
+ess = sum(var$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-2*n1-1, lower.tail=F)
+```
+
+p-value = 3.398337e-09 => VAR(3) model превосходит ARMA model.
+
+### 11.2.2. Модель с ограничениями (в сравнении с ARMA)
+
+```{r}
+resvar = restrict(var, method = c("ser"), thresh = 0.7)
+n1 = resvar$varresult$d1TATN$rank-1
+if(n1<n+1){n1=n+1}
+ess = sum(resvar$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-n-n1-1, lower.tail=F)
+```
+
+```{r}
+Hosking(resvar, lags=1.3*var$p)
+LiMcLeod(resvar, lags=1.3*var$p)
+```
+
+F-критерий увеличился, при этом модель все еще лучше ARMA и не имеет авто- и кросс-корреляции остатков => превосходит модель без ограничений.
+
+### 11.2.3. Сравнение модели с 2-мя и 3-мя переменными 
+
+```{r}
+#модель с 2-мя переменными
+df = data.frame(d1TATN, d1SIBN)
+var = VAR(df, p = 10, type = 'const')
+resvar = restrict(var, method = c("ser"), thresh = 0.8)
+n = resvar$varresult$d1TATN$rank-1
+x = 10-10+1
+rss = sum(resvar$varresult$d1TATN$residuals[x:length(resvar$varresult$d1TATN$residuals)]^2)
+
+#модель с 3-мя переменными
+df = data.frame(d1TATN, d1SIBN, d1KMAZ)
+var = VAR(df, p = 10, type = 'const')
+resvar = restrict(var, method = c("ser"), thresh = 0.7)
+n1 = resvar$varresult$d1TATN$rank-1
+ess = sum(resvar$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-2*n1-1, lower.tail=F)
+```
+
+F-критерий уменьшился, однако значение p-value на 5% уровне значимости говорит о том, что модель с тремя переменными корректна и лучше для объяснения d1TATN, чем с двумя.
+
+## 11.3. Модель с 4-мя переменными: SIBN, KMAZ, NLMK cause TATN
+
+```{r}
+df = data.frame(d1TATN, d1SIBN, d1KMAZ, d1NLMK)
+VARselect(df, lag.max = 24, type = 'const')$selection
+```
+
+```{r}
+var = VAR(df, p = 8, type = 'const')
+Hosking(var, lags=1.2*var$p)
+LiMcLeod(var, lags=1.2*var$p)
+```
+
+Авто- и кросс-корреляции нет
+
+### 11.3.1. Модель без ограничений (в сравнении с ARMA)
+
+```{r}
+n = length(coef(ARMAmodelTANT))-1
+x = var$p-n+1
+rss = sum(ARMAmodelTANT$residuals[x:length(residuals(ARMAmodelTANT))]^2)
+n1 = var$varresult$d1TATN$rank-1
+ess = sum(var$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-2*n1-1, lower.tail=F)
+```
+
+p-value = 2.569228e-08 => VAR(4) model превосходит ARMA model.
+
+### 11.3.2. Модель с ограничениями (в сравнении с ARMA)
+
+```{r}
+resvar = restrict(var, method = c("ser"), thresh = 0.6)
+n1 = resvar$varresult$d1TATN$rank-1
+if(n1<n+1){n1=n+1}
+ess = sum(resvar$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-n-n1-1, lower.tail=F)
+```
+
+```{r}
+Hosking(resvar, lags=1.2*var$p)
+LiMcLeod(resvar, lags=1.2*var$p)
+```
+
+F-критерий увеличился, при этом модель все еще лучше ARMA и не имеет авто- и кросс-корреляции остатков => превосходит модель без ограничений.
+
+### 11.3.3. Сравнение модели с 3-мя и 4-мя переменными 
+
+```{r}
+#модель с 3-мя переменными
+df = data.frame(d1TATN, d1SIBN, d1KMAZ)
+var = VAR(df, p = 10, type = 'const')
+resvar = restrict(var, method = c("ser"), thresh = 0.7)
+n = resvar$varresult$d1TATN$rank-1
+x = 10-8+1
+rss = sum(resvar$varresult$d1TATN$residuals[x:length(resvar$varresult$d1TATN$residuals)]^2)
+
+#модель с 4-мя переменными
+df = data.frame(d1TATN, d1SIBN, d1KMAZ, d1NLMK)
+var = VAR(df, p = 8, type = 'const')
+resvar = restrict(var, method = c("ser"), thresh = 0.6)
+n1 = resvar$varresult$d1TATN$rank-1
+ess = sum(resvar$varresult$d1TATN$residuals^2)
+
+Fstat = ((rss-ess)/(n1-n))/(ess/(length(d1TATN)-2*n1-1))
+Fstat
+
+qf(0.99, df1=n1-n, df2=length(d1TATN)-2*n1-1)
+pf(Fstat, n1-n, length(d1TATN)-2*n1-1, lower.tail=F)
+```
+
+Модель с 4-мя переменными хуже, чем модель с 3-мя переменными для объяснения d1TATN.
+
+## 11.4. Итог:
+
+Конечная модель - VAR model с 3-мя переменными с ограничениями.
+
+```{r}
+df_var = data.frame(d1TATN, d1SIBN, d1KMAZ)
+var = VAR(df_var, p = 10, type = 'const')
+resvar = restrict(var, method = c("ser"), thresh = 0.7)
+```
+
+
+# 12. Структурные сдвиги на VAR модели 
+
+Нас интересуют конкретные разрывы в 2020 году, а именно 31 января 2020 года - появились первые зараженные коронавирусом в России и 11 августа 2020 - регистрация в России первой в мире вакции от COVID-19. Поэтому рассмотрим разрывы на промежутке всего 2020 года.
+
+Для новых "кусков" данных нам понадобятся новые модели ARMA для проверки структурных сдвигов. ln(250) = 5
+
+Мы проводим Sup-F тест для поиска структурных разрывов, а также тест Bai Perron - для множественных разрывов.
+
+## 12.1. d1TATN
+
+```{r}
+d1TATN_sdvig = df_var$d1TATN[1261:1510] 
+ARMAmodelTATN_sdvig = Arima(d1TATN_sdvig, c(2,0,1), include.constant=TRUE, method = c("CSS-ML"))  
+Box.test(residuals(ARMAmodelTATN_sdvig), lag = 5, type = c("Ljung-Box"), fitdf = 3) 
+```
+
+Автокорреляции нет - модель годная.
+
+```{r}
+d1TATN_sdvig = d1TATN_sdvig[1:length(d1TATN_sdvig)]
+d1TATN_sdvig_l1 = c(0,d1TATN_sdvig[1:length(d1TATN_sdvig)-1])
+d1TATN_sdvig_l2 = c(0,0,d1TATN_sdvig[2:length(d1TATN_sdvig)-2])
+
+stat_TATN = Fstats(d1TATN_sdvig ~ d1TATN_sdvig_l1 + d1TATN_sdvig_l2, from = 0.1, to = NULL)
+plot(stat_TATN, alpha = 0.01)
+lines(breakpoints(stat_TATN))
+a_TATN = breakpoints(stat_TATN)
+a_TATN$breakpoints
+sctest(stat_TATN, type = "supF")
+
+data$date[1261+44]
+```
+
+Структурный разрыв есть на 10% уровне - 10 марта 2020 года. 
+
+
+## 12.2. d1SIBN
+
+```{r}
+d1SIBN_sdvig = df_var$d1SIBN[1261:1510] 
+ARMAmodelSIBN_sdvig = Arima(d1SIBN_sdvig, c(1,0,1), include.constant=TRUE, method = c("CSS-ML"))  
+Box.test(residuals(ARMAmodelSIBN_sdvig), lag = 5, type = c("Ljung-Box"), fitdf = 2) 
+```
+
+Автокорреляции нет - модель годная.
+
+```{r}
+d1SIBN_sdvig = d1SIBN_sdvig[1:length(d1SIBN_sdvig)]
+d1SIBN_sdvig_l1 = c(0,d1SIBN_sdvig[1:length(d1SIBN_sdvig)-1])
+
+stat_SIBN = Fstats(d1SIBN_sdvig ~ d1SIBN_sdvig_l1, from = 0.1, to = NULL)
+plot(stat_SIBN, alpha = 0.01)
+lines(breakpoints(stat_SIBN))
+a_SIBN = breakpoints(stat_SIBN)
+a_SIBN$breakpoints
+sctest(stat_SIBN, type = "supF")
+
+data$date[1261+50]
+```
+
+Присутствует сдвиг на 10% уровне - 18 марта 2020 года.
+
+
+## 12.3. d1KMAZ
+
+```{r}
+d1KMAZ_sdvig = df_var$d1KMAZ[1261:1510] 
+ARMAmodelKMAZ_sdvig = Arima(d1KMAZ_sdvig, c(2,0,2), include.constant=TRUE, method = c("CSS-ML"))  
+Box.test(residuals(ARMAmodelKMAZ_sdvig), lag = 5, type = c("Ljung-Box"), fitdf = 4) 
+```
+
+Автокорреляции нет - модель годная.
+
+```{r}
+d1KMAZ_sdvig = d1KMAZ_sdvig[1:length(d1KMAZ_sdvig)]
+d1KMAZ_sdvig_l1 = c(0,d1KMAZ_sdvig[1:length(d1KMAZ_sdvig)-1])
+d1KMAZ_sdvig_l2 = c(0,0,d1KMAZ_sdvig[2:length(d1KMAZ_sdvig)-2])
+
+stat_KMAZ = Fstats(d1KMAZ_sdvig ~ d1KMAZ_sdvig_l1 + d1KMAZ_sdvig_l2, from = 0.1, to = NULL)
+plot(stat_KMAZ, alpha = 0.01)
+lines(breakpoints(stat_KMAZ))
+a_KMAZ = breakpoints(stat_KMAZ)
+a_KMAZ$breakpoints
+sctest(stat_KMAZ, type = "supF")
+
+data$date[1261+50]
+```
+
+Присутствует сдвиг на 10% уровне - 18 марта 2020 года.
+
+
+## 12.4. Вывод:
+
+На 10% уровне значимости наблюдаются стуктурные разрывы в марте (10 и 18 числа). Тогда начали вступать в силу первые серьезные ограничения из-за COVID-19, а заболеваемость в стране стремительно поднималась вверх.
+
+
+# 14. Прогнозы
+
+Для сравнения моделей мы построили несколько разных прогнозов на год:
+
+## 14.1. Прогнозы на основе модели ARMA
+
+Прогноз на основе модели ARMA дает представление о колебании будущих цен на акции. Мы можем видеть, что цены везде идут вверх, но сильно медленнее поднимаются у акций Сургутнефтигаза и Аэрофлота.
+
+```{r message = FALSE, warning=FALSE, comment = ""}
+forecast_TATN = forecast(ARMAmodelTANT, h=365)
+plot(forecast_TATN)
+
+forecast_SNGS = forecast(ARMAmodelSNGS, h=365)
+plot(forecast_SNGS)
+
+forecast_ALRS = forecast(ARMAmodelALRS, h=365)
+plot(forecast_ALRS)
+
+forecast_SIBN = forecast(ARMAmodelSIBN, h=365)
+plot(forecast_SIBN)
+
+forecast_NLMK = forecast(ARMAmodelNLMK, h=365)
+plot(forecast_NLMK)
+
+forecast_KMAZ = forecast(ARMAmodelKMAZ, h=365)
+plot(forecast_KMAZ)
+
+forecast_AFLT = forecast(ARMAmodelAFLT, h=365)
+plot(forecast_AFLT)
+```
+
+
+## 14.2. Прогнозы на основе модели simple GARCH
+
+Что касается прогноза на основе simple GARCH, он показывает прогноз именно изменения цен на акции. В целом, можно сказать, что прогнозы двух моделей дополняют друг друга.
+
+```{r message = FALSE, warning=FALSE, comment = ""}
+prognoz_TATN = ugarchforecast(garch.TATN, n.ahead = 365)
+sigmaforecast_TATN = c(garch.TATN@fit$sigma, sigma(prognoz_TATN))
+plot(sigmaforecast_TATN, type = 'l')
+
+prognoz_SNGS = ugarchforecast(garch.SNGS, n.ahead = 365)
+sigmaforecast_SNGS = c(garch.SNGS@fit$sigma, sigma(prognoz_SNGS))
+plot(sigmaforecast_SNGS, type = 'l')
+
+prognoz_ALRS = ugarchforecast(garch.ALRS, n.ahead = 365)
+sigmaforecast_ALRS = c(garch.ALRS@fit$sigma, sigma(prognoz_ALRS))
+plot(sigmaforecast_ALRS, type = 'l')
+
+prognoz_SIBN = ugarchforecast(garch.SIBN, n.ahead = 365)
+sigmaforecast_SIBN = c(garch.SIBN@fit$sigma, sigma(prognoz_SIBN))
+plot(sigmaforecast_SIBN, type = 'l')
+
+prognoz_NLMK = ugarchforecast(garch.NLMK, n.ahead = 365)
+sigmaforecast_NLMK = c(garch.NLMK@fit$sigma, sigma(prognoz_NLMK))
+plot(sigmaforecast_NLMK, type = 'l')
+
+prognoz_KMAZ = ugarchforecast(garch.KMAZ, n.ahead = 365)
+sigmaforecast_KMAZ = c(garch.KMAZ@fit$sigma, sigma(prognoz_KMAZ))
+plot(sigmaforecast_KMAZ, type = 'l')
+
+prognoz_AFLT = ugarchforecast(garch.AFLT, n.ahead = 365)
+sigmaforecast_AFLT = c(garch.AFLT@fit$sigma, sigma(prognoz_AFLT))
+plot(sigmaforecast_AFLT, type = 'l')
+```
+
+## 14.3. Прогноз VAR модели
+
+Прогноз по VAR модели показывает прогноз целевой переменной – цен акций компании Татнефть - на основе предыдущих данных цен акций Газпром нефти и Камаз - влияющих на нее переменных. 
+
+На остатках: 
+
+```{r message = FALSE, warning=FALSE, comment = ""}
+df_var = data.frame(d1TATN, d1SIBN, d1KMAZ)
+#VARselect(df_var, lag.max = 20, type = "const")
+VAR_final = VAR(df_var, p = 10, type = "const")
+
+prognoz_var = predict(VAR_final, n.ahead = 365)
+plot(prognoz_var, nc = 1)
+```
+
+Прогноз основных данных:
+
+```{r message = FALSE, warning=FALSE, echo=F, comment = ""}
+#вычисляем дисперсию ошибки
+c_inf = pnorm(1, mean = 0, sd = 1) - pnorm(-1, mean = 0, sd = 1) 
+ff = predict(resvar, n.ahead = 365, ci = c_inf) 
+Derr = (ff$fcst$d1TATN[,c("upper")]-ff$fcst$d1TATN[,c("fcst")])^2 
+#задаем вероятность доверительного интервала
+prob = 0.95
+kk = qnorm(prob, mean = 0, sd = 1) 
+#строим прогноз
+f = rep(0,length(Derr))
+TATN_for = c(data$TATN_p, f)
+TATN_up = c(data$TATN_p, f)
+TATN_low = c(data$TATN_p, f)
+T = length(data$TATN_p)
+i = 1
+while(i<length(Derr)+1)
+{
+  TATN_for[T+i] = TATN_for[T+i-1]+ff$fcst$d1TATN[i,c("fcst")]
+  TATN_up[T+i] = TATN_up[T+i-1]+ff$fcst$d1TATN[i,c("fcst")]+kk*(Derr[i]/i)^0.5
+  TATN_low[T+i] = TATN_low[T+i-1]+ff$fcst$d1TATN[i,c("fcst")]-kk*(Derr[i]/i)^0.5 
+  i<-i+1
+}
+
+TATN_for = TATN_for[1000:2130]
+TATN_up = TATN_up[1000:2130]
+TATN_low = TATN_low[1000:2130]
+```
+
+```{r message = FALSE, warning=FALSE, comment = ""}
+Price_forARMA = c(data$TATN_p, forecast_TATN$mean)
+Price_forARMA = Price_forARMA[1000:2130]
+Price_upARMA = c(data$TATN_p, forecast_TATN$upper[,2])
+Price_upARMA = Price_upARMA[1000:2130]
+Price_lowARMA = c(data$TATN_p,forecast_TATN$lower[,2])
+Price_lowARMA = Price_lowARMA[1000:2130]
+
+plot(TATN_for, type = "l")
+lines(TATN_up)
+lines(TATN_low)
+
+lines(Price_forARMA, col='red')
+lines(Price_upARMA, col='red')
+lines(Price_lowARMA, col='red')
+```
+
+Красная линия - прогноз по модели ARMA для цен на акции компании Татнефть. 
+
+Черная линия - прогноз на основе VAR(3) модели 
+
+На графике видно, что VAR прогноз немного ниже, чем арма, так как основано на днных трех переменных, а не одной, целевой.
+
+
+# 13. Ожидаемая доходность портфеля  
+
+Ожидаемая доходность: Ri = Rf + β(Rm−Rf)
+
++ Rf - безрисковая ставка доходности (доходность государственных облигаций - мы взяли годовые)
+
++ Rm - ожидаемая рыночная доходность (индекс Мосбиржи)
+
++ Rm − Rf - премия за инвестиционный риск
+
++ β - коэффициент чувтвительности (источник - Тинькофф Инвестиции)
+
+Бета-коэффициенты: TATN_p = 1, SNGS_p = 0.99, ALRS = 0.93, SIBN = 0.86, NLMK = 0.27, KMAZ = 0.81, AFLT = 1.12
+
+Мы считаем реальную доходность акций через процент изменения от дня ко дню, а доходность по модели CAPM –  по формуле через линейную регрессию.
+
+```{r message = FALSE, warning=FALSE, comment = ""}
+tatn = read_excel("stocks.xlsx", sheet = "TATN_p") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "TATN_return" = "Изм. %") 
+sngs = read_excel("stocks.xlsx", sheet = "SNGS_p") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "SNGS_return" = "Изм. %") 
+alrs = read_excel("stocks.xlsx", sheet = "ALRS") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "ALRS_return" = "Изм. %") 
+sibn = read_excel("stocks.xlsx", sheet = "SIBN") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "SIBN_return" = "Изм. %") 
+nlmk = read_excel("stocks.xlsx", sheet = "NLMK") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "NLMK_return" = "Изм. %")  
+kmaz = read_excel("stocks.xlsx", sheet = "KMAZ") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "KMAZ_return" = "Изм. %")
+aflt = read_excel("stocks.xlsx", sheet = "AFLT") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "AFLT_return" = "Изм. %")
+
+imoex = read_excel("IMOEX.xlsx") %>% dplyr::select("Дата", "Изм. %") %>% 
+  rename("date" = "Дата", "R_m" = "Изм. %") 
+imoex$date = ymd(imoex$date)
+imoex$R_m = as.numeric(imoex$R_m)
+bonds = read_excel("annual_bonds.xlsx") %>% dplyr::select("Дата", "Цена") %>% 
+  rename("date" = "Дата", "R_f" = "Цена") 
+bonds$date = ymd(bonds$date)
+
+capm = data %>% dplyr::select(date) %>% left_join(tatn, by = "date") %>% left_join(sngs, by = "date") %>%
+  left_join(alrs, by = "date") %>% left_join(sibn, by = "date") %>% left_join(nlmk, by = "date") %>% 
+  left_join(kmaz, by = "date") %>%left_join(aflt, by = "date") %>% 
+  left_join(bonds, by = "date") %>% left_join(imoex, by = "date")
+
+capm$TATN_return = capm$TATN_return/100
+capm$SNGS_return = capm$SNGS_return/100
+capm$ALRS_return = capm$ALRS_return/100
+capm$SIBN_return = capm$SIBN_return/100
+capm$NLMK_return = capm$NLMK_return/100
+capm$KMAZ_return = capm$KMAZ_return/100
+capm$AFLT_return = capm$AFLT_return/100
+capm$R_m = capm$R_m/100
+capm$R_f = capm$R_f/100
+
+capm = capm %>% mutate(risk_premium = R_m - R_f)
+
+capm = capm %>% mutate(TATN_rp = 1 * risk_premium, SNGS_rp = 0.99 * risk_premium, 
+                       ALRS_rp = 0.93 * risk_premium, SIBN_rp = 0.86 * risk_premium, 
+                       NLMK_rp = 0.27 * risk_premium, KMAZ_rp = 0.81 * risk_premium,
+                       AFLT_rp = 1.12 * risk_premium)
+
+# считаем ожидаемую доходность 
+TATN_fit = lm(TATN_return ~ R_f + TATN_rp, data = capm)
+SNGS_fit = lm(SNGS_return ~ R_f + SNGS_rp, data = capm)
+ALRS_fit = lm(ALRS_return ~ R_f + ALRS_rp, data = capm)
+SIBN_fit = lm(SIBN_return ~ R_f + SIBN_rp, data = capm)
+NLMK_fit = lm(NLMK_return ~ R_f + NLMK_rp, data = capm)
+KMAZ_fit = lm(KMAZ_return ~ R_f + KMAZ_rp, data = capm)
+AFLT_fit = lm(AFLT_return ~ R_f + AFLT_rp, data = capm)
+
+TATN_predict = predict.lm(TATN_fit)
+SNGS_predict = predict.lm(SNGS_fit)
+ALRS_predict = predict.lm(ALRS_fit)
+SIBN_predict = predict.lm(SIBN_fit)
+NLMK_predict = predict.lm(NLMK_fit)
+KMAZ_predict = predict.lm(KMAZ_fit)
+AFLT_predict = predict.lm(AFLT_fit)
+
+capm$TATN_predict = TATN_predict
+capm$SNGS_predict = SNGS_predict
+capm$ALRS_predict = ALRS_predict
+capm$SIBN_predict = SIBN_predict
+capm$NLMK_predict = NLMK_predict
+capm$KMAZ_predict = KMAZ_predict
+capm$AFLT_predict = AFLT_predict
+```
+
+## 13.1. Графики доходности
+
+Красная линия - реальная доходность
+Синия линия - доходность по модели CAPM
+
+```{r}
+date_d = c(1:1765)
+capm = capm %>% mutate(date_d = date_d) %>% filter(date_d > 1399)
+capm$date = ymd(capm$date)
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = TATN_return), color = "red") +
+  geom_line(aes(x = date, y = TATN_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Татнефть') +
+  xlab('Дата') +
+  ylab('Доходность') +
+  theme_bw()
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = SNGS_return), color = "red") +
+  geom_line(aes(x = date, y = SNGS_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Сургутнефтегаз') +
+  xlab('Дата') + 
+  ylab('Доходность') +
+  theme_bw()
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = ALRS_return), color = "red") +
+  geom_line(aes(x = date, y = ALRS_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Алроса') +
+  xlab('Дата') +
+  ylab('Доходность') +
+  theme_bw()
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = NLMK_return), color = "red") +
+  geom_line(aes(x = date, y = NLMK_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Газпром нефть') +
+  xlab('Дата') +
+  ylab('Доходность') +
+  theme_bw()
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = KMAZ_return), color = "red") +
+  geom_line(aes(x = date, y = KMAZ_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Новолипецкий металлургический завод') +
+  xlab('Дата') +
+  ylab('Доходность') +
+  theme_bw()
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = AFLT_return), color = "red") +
+  geom_line(aes(x = date, y = AFLT_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Камаз') +
+  xlab('Дата') +
+  ylab('Доходность') +
+  theme_bw()
+
+ggplot(capm) +
+  geom_line(aes(x = date, y = SIBN_return), color = "red") +
+  geom_line(aes(x = date, y = SIBN_predict), color = "blue") +
+  ggtitle('График доходности по модели CAPM и реальной доходности \n Аэрофлот') +
+  xlab('Дата') +
+  ylab('Доходность') +
+  theme_bw()
+```
+
+
+Таким образом, мы построили графики сравнения реальной доходности и доходности, прогнозируемой моделью. В целом, можно увидеть, что модель довольно четко описывает реальную доходность, имея лишь меньше выбросов. 
