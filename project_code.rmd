@@ -605,10 +605,11 @@ ur.df(coint_AFLT_KMAZ$residuals, type="drift", lags = 1, selectlags = "Fixed")
 ```{r}
 df_all = data %>% dplyr::select(-date)
 coint_jo_all = ca.jo(df_all, ecdet = "const", type = "eigen", K=2, spec = "transitory", season = NULL)
-coint_jo_all
+jo = data.frame(coint_jo_all@teststat, coint_jo_all@cval)
+jo
 ```
 
-На уровне r = 0: 43.15 < 51.91 => нулевая гипотеза (коинтеграция между 7 переменными отсутствует) не отвергается, то есть коинтеграции между выбранными нами акциями не неблюдается. 
+На уровне r = 0: 43.147034 < 43.25 => нулевая гипотеза (коинтеграция между 7 переменными отсутствует) не отвергается, то есть коинтеграции между выбранными нами акциями не неблюдается. 
 
 Таким образом, для совместного прогноза берем разности по всем данным и строим VAR model.
 
