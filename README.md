@@ -1,3 +1,3 @@
 view html 
 
-https://rawcdn.githack.com/afrakhmanova/Time-Series-Analysis/fede4eae8ffcef565117798015ccf0e92012bb3d/project_html.html
+https://rawcdn.githack.com/afrakhmanova/Time-Series-Analysis/2e5247d6aac9e6b56467b4bc9e65eca9d0a66717/project_%20html.html
